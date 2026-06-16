@@ -1,10 +1,13 @@
 @extends('safe-git-manager.layout')
 
 @section('content')
-<h1>Diff: {{ $repository->name }}</h1>
-<p>
-    <a href="{{ route('safe-git.repositories.show', $repository) }}">詳細へ戻る</a>
-</p>
+<div class="workbench-header">
+    <div class="repo-title">
+        <h1>Diff: {{ $repository->name }}</h1>
+        <code>{{ $path ?: '全体 diff' }}</code>
+    </div>
+    <a class="button-link" href="{{ route('safe-git.repositories.show', $repository) }}">操作画面へ戻る</a>
+</div>
 
 <div class="card">
     @if(!empty($path))

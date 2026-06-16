@@ -106,7 +106,7 @@ class SafeGitManagerController extends Controller
         $originExists = $this->originExists($repository);
 
         if ($data['mode'] === 'add' && $originExists) {
-            return back()->with('error', 'origin はすでに設定されています。URLを変更する場合は「remote set-url origin」を選んでください。');
+            return back()->with('error', 'origin はすでに設定されています。URL を変更する場合は「remote set-url origin」を選んでください。');
         }
 
         if ($data['mode'] === 'set-url' && ! $originExists) {
