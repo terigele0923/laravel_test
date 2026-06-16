@@ -69,6 +69,15 @@ class SafeGitManagerController extends Controller
         return view('safe-git-manager.repositories.show', compact('repository', 'status', 'graph'));
     }
 
+    public function destroy(SafeGitRepository $repository): RedirectResponse
+    {
+        $name = $repository->name;
+        $repository->delete();
+
+        return redirect()->route('safe-git.repositories.index')
+            ->with('success', "「{$name}」の登録を削除しました。ローカルフォルダと GitHub リポジトリは削除していません。");
+    }
+
     public function init(Request $request, SafeGitRepository $repository): RedirectResponse
     {
         return $this->execute($request, $repository, 'init', function () use ($request, $repository) {

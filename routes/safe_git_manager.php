@@ -8,6 +8,7 @@ Route::middleware(['web'])->prefix('safe-git')->name('safe-git.')->group(functio
     Route::get('/repositories/create', [SafeGitManagerController::class, 'create'])->name('repositories.create');
     Route::post('/repositories', [SafeGitManagerController::class, 'store'])->name('repositories.store');
     Route::get('/repositories/{repository}', [SafeGitManagerController::class, 'show'])->name('repositories.show');
+    Route::delete('/repositories/{repository}', [SafeGitManagerController::class, 'destroy'])->name('repositories.destroy');
 
     Route::post('/repositories/{repository}/init', [SafeGitManagerController::class, 'init'])->name('repositories.init');
     Route::post('/repositories/{repository}/remote', [SafeGitManagerController::class, 'remote'])->name('repositories.remote');

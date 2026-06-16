@@ -8,7 +8,14 @@
     $files = $status['files'] ?? [];
 @endphp
 
-<h1>{{ $repository->name }}</h1>
+<div class="actions" style="justify-content: space-between;">
+    <h1>{{ $repository->name }}</h1>
+    <form method="POST" action="{{ route('safe-git.repositories.destroy', $repository) }}" onsubmit="return confirm('この管理画面から登録を削除します。ローカルフォルダとGitHubリポジトリは削除されません。よろしいですか？');">
+        @csrf
+        @method('DELETE')
+        <button type="submit" class="danger">この登録を削除</button>
+    </form>
+</div>
 
 <div class="grid">
     <div class="card">
@@ -54,13 +61,13 @@
 
 <div class="card">
     <h2>2. 変更ファイル</h2>
-    <p class="muted">コミットしたいファイルを add します。まとめて追加する場合は「すべて add」を使えます。</p>
+    <p class="muted">コミットしたいファイルを add します。まとめて追加する場合は下のボタンを使います。</p>
 
     <div class="actions">
         <form method="POST" action="{{ route('safe-git.repositories.add', $repository) }}">
             @csrf
             <input type="hidden" name="path" value=".">
-            <button type="submit">すべて add</button>
+            <button type="submit" class="primary">変更をすべてステージング</button>
         </form>
         <a href="{{ route('safe-git.repositories.diff', $repository) }}">diffを見る</a>
         <a href="{{ route('safe-git.repositories.logs', $repository) }}">操作ログ</a>
@@ -83,7 +90,7 @@
                         <form method="POST" action="{{ route('safe-git.repositories.add', $repository) }}">
                             @csrf
                             <input type="hidden" name="path" value="{{ $file['path'] }}">
-                            <button type="submit">add</button>
+                            <button type="submit">このファイルを add</button>
                         </form>
                     </td>
                 </tr>
