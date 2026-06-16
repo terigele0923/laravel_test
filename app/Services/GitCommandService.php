@@ -14,7 +14,7 @@ class GitCommandService
         $this->assertAllowedGitArguments($arguments);
 
         $command = array_merge(['git'], $arguments);
-        $process = new Process($command, $workingDirectory);
+        $process = new Process($command, $workingDirectory, $this->gitEnvironment());
         $process->setTimeout(60);
         $process->run();
 
@@ -45,6 +45,18 @@ class GitCommandService
         if (! file_exists($readme)) {
             file_put_contents($readme, "# {$projectName}".PHP_EOL);
         }
+    }
+
+    private function gitEnvironment(): array
+    {
+        return array_filter([
+            'PATH' => getenv('PATH') ?: null,
+            'Path' => getenv('Path') ?: null,
+            'SystemRoot' => getenv('SystemRoot') ?: 'C:\\Windows',
+            'WINDIR' => getenv('WINDIR') ?: 'C:\\Windows',
+            'HOME' => getenv('HOME') ?: getenv('USERPROFILE') ?: null,
+            'USERPROFILE' => getenv('USERPROFILE') ?: null,
+        ]);
     }
 
     private function assertSafeWorkingDirectory(string $path, bool $shouldExist = true): void
