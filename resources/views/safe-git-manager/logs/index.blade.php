@@ -8,7 +8,7 @@
     <thead>
         <tr>
             <th>日時</th>
-            <th>操作</th>
+            <th>操作画面</th>
             <th>状態</th>
             <th>コマンド</th>
             <th>出力</th>

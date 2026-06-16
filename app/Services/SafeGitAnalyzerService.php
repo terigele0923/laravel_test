@@ -36,7 +36,8 @@ class SafeGitAnalyzerService
     {
         $files = [];
 
-        foreach (array_filter(explode("\n", trim($output))) as $line) {
+        foreach (array_filter(explode("\n", rtrim($output))) as $line) {
+            $line = rtrim($line, "\r");
             $status = substr($line, 0, 2);
             $path = trim(substr($line, 3));
 
