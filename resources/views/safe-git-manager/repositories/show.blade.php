@@ -5,10 +5,14 @@
     $originRemote = $status['remotes']['origin'] ?? null;
     $originUrl = $originRemote['push'] ?? $originRemote['fetch'] ?? null;
     $selectedRemoteMode = old('mode', $originRemote ? 'set-url' : 'add');
-    $files = $status['files'] ?? [];
+    $unstagedFiles = $status['unstaged_files'] ?? [];
+    $stagedFiles = $status['staged_files'] ?? [];
     $branches = $status['branches'] ?? [];
+    $remoteBranches = $status['remote_branches'] ?? [];
     $currentBranch = $status['branch'] ?? '-';
     $mergeBranches = array_values(array_filter($branches, fn ($branch) => ! $branch['current']));
+    $history = $status['history'] ?? [];
+    $stashes = $status['stashes'] ?? [];
 @endphp
 
 <div class="workbench-header">
@@ -23,15 +27,15 @@
         </form>
         <form class="mini-form" method="POST" action="{{ route('safe-git.repositories.pull', $repository) }}">
             @csrf
+            <label class="split-note"><input type="checkbox" name="confirm_dirty_pull" value="1"> 未コミットでもpull</label>
             <button type="submit">pull</button>
         </form>
         <form class="mini-form" method="POST" action="{{ route('safe-git.repositories.push', $repository) }}">
             @csrf
-            <label class="split-note"><input type="checkbox" name="confirm_main_push" value="1"> main/master 確認</label>
+            <label class="split-note"><input type="checkbox" name="confirm_main_push" value="1"> main/master確認</label>
             <button type="submit" class="danger">push</button>
         </form>
-        <a href="{{ route('safe-git.repositories.diff', $repository) }}"><button type="button">diff</button></a>
-        <a href="{{ route('safe-git.repositories.logs', $repository) }}"><button type="button">ログ</button></a>
+        <a href="{{ route('safe-git.repositories.logs', $repository) }}"><button type="button">操作ログ</button></a>
     </div>
 </div>
 
@@ -58,7 +62,7 @@
             </div>
 
             <div class="sidebar-section">
-                <h3>Branches</h3>
+                <h3>Local Branches</h3>
                 <div class="branch-list">
                     @forelse($branches as $branch)
                         <div class="branch-row">
@@ -90,7 +94,26 @@
                             </div>
                         </div>
                     @empty
-                        <p class="muted">ブランチ情報がありません。</p>
+                        <p class="muted">ローカルブランチがありません。</p>
+                    @endforelse
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <h3>Remote Branches</h3>
+                <div class="branch-list">
+                    @forelse($remoteBranches as $branch)
+                        <div class="branch-row">
+                            <div class="branch-name"><code>{{ $branch['name'] }}</code></div>
+                            <form class="mini-form" method="POST" action="{{ route('safe-git.repositories.branches.checkout-remote', $repository) }}">
+                                @csrf
+                                <input type="hidden" name="remote_branch" value="{{ $branch['name'] }}">
+                                <input type="hidden" name="local_branch" value="{{ $branch['local_name'] }}">
+                                <button type="submit" class="compact">checkout</button>
+                            </form>
+                        </div>
+                    @empty
+                        <p class="muted">リモートブランチがありません。fetch後に表示されます。</p>
                     @endforelse
                 </div>
             </div>
@@ -109,51 +132,96 @@
     <main class="panel pane">
         <div class="pane-header">
             <h2>File Status</h2>
-            <span class="badge">{{ count($files) }} changed</span>
+            <span class="badge">{{ count($unstagedFiles) }} unstaged / {{ count($stagedFiles) }} staged</span>
         </div>
         <div class="pane-body">
+            @if(!empty($status['conflicts']))
+                <div class="alert error">
+                    コンフリクトがあります: {{ implode(', ', $status['conflicts']) }}
+                </div>
+            @endif
+
             <div class="file-toolbar">
-                <p class="muted">コミット対象の変更をステージングします。</p>
+                <h2>Unstaged files</h2>
                 <div class="actions">
                     <form class="mini-form" method="POST" action="{{ route('safe-git.repositories.add', $repository) }}">
                         @csrf
                         <input type="hidden" name="path" value=".">
                         <button type="submit" class="primary">すべてステージング</button>
                     </form>
-                    <a href="{{ route('safe-git.repositories.diff', $repository) }}">diffを見る</a>
+                    <a href="{{ route('safe-git.repositories.diff', $repository) }}">全体diff</a>
                 </div>
             </div>
-
-            @if(!empty($status['conflicts']))
-                <div class="alert error">
-                    コンフリクトがあります:
-                    {{ implode(', ', $status['conflicts']) }}
-                </div>
-            @endif
 
             <table>
                 <thead>
                     <tr>
                         <th style="width: 120px;">状態</th>
                         <th>ファイル</th>
-                        <th style="width: 170px;">操作</th>
+                        <th style="width: 270px;">操作</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse($files as $file)
+                    @forelse($unstagedFiles as $file)
                         <tr>
                             <td><span class="badge">{{ $file['status'] }}</span></td>
                             <td class="file-name"><code>{{ $file['path'] }}</code></td>
                             <td>
-                                <form class="mini-form" method="POST" action="{{ route('safe-git.repositories.add', $repository) }}">
-                                    @csrf
-                                    <input type="hidden" name="path" value="{{ $file['path'] }}">
-                                    <button type="submit" class="compact">このファイルを add</button>
-                                </form>
+                                <div class="actions">
+                                    <form class="mini-form" method="POST" action="{{ route('safe-git.repositories.add', $repository) }}">
+                                        @csrf
+                                        <input type="hidden" name="path" value="{{ $file['path'] }}">
+                                        <button type="submit" class="compact">add</button>
+                                    </form>
+                                    <a href="{{ route('safe-git.repositories.diff', ['repository' => $repository, 'path' => $file['path']]) }}">diff</a>
+                                    <form class="mini-form" method="POST" action="{{ route('safe-git.repositories.discard', $repository) }}" onsubmit="return confirm('「{{ $file['path'] }}」の作業ツリー変更を破棄します。元に戻せません。よろしいですか？');">
+                                        @csrf
+                                        <input type="hidden" name="path" value="{{ $file['path'] }}">
+                                        @if($file['untracked'])
+                                            <input type="hidden" name="untracked" value="1">
+                                        @endif
+                                        <button type="submit" class="compact danger">破棄</button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="3">変更はありません。</td></tr>
+                        <tr><td colspan="3">未ステージの変更はありません。</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+
+            <div class="file-toolbar" style="margin-top: 18px;">
+                <h2>Staged files</h2>
+                <span class="muted">commit に含まれるファイルです。</span>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 120px;">状態</th>
+                        <th>ファイル</th>
+                        <th style="width: 220px;">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($stagedFiles as $file)
+                        <tr>
+                            <td><span class="badge ok">{{ $file['status'] }}</span></td>
+                            <td class="file-name"><code>{{ $file['path'] }}</code></td>
+                            <td>
+                                <div class="actions">
+                                    <form class="mini-form" method="POST" action="{{ route('safe-git.repositories.unstage', $repository) }}">
+                                        @csrf
+                                        <input type="hidden" name="path" value="{{ $file['path'] }}">
+                                        <button type="submit" class="compact">unstage</button>
+                                    </form>
+                                    <a href="{{ route('safe-git.repositories.diff', ['repository' => $repository, 'path' => $file['path'], 'cached' => 1]) }}">staged diff</a>
+                                </div>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="3">ステージ済みファイルはありません。</td></tr>
                     @endforelse
                 </tbody>
             </table>
@@ -167,9 +235,10 @@
                 <form method="POST" action="{{ route('safe-git.repositories.commit', $repository) }}">
                     @csrf
                     <label>コミットメッセージ</label>
-                    <textarea name="message" rows="5" placeholder="例: UIをSourceTree風に調整" required></textarea>
-                    <button type="submit" class="primary">commit</button>
+                    <textarea name="message" rows="5" placeholder="例: UIとGit操作を改善" required></textarea>
+                    <button type="submit" class="primary">commit staged</button>
                 </form>
+                <p class="split-note">ステージ済みファイルがない場合は commit を止めます。</p>
             </div>
         </section>
 
@@ -200,6 +269,49 @@
         </section>
 
         <section class="panel pane">
+            <div class="pane-header"><h2>Stash</h2></div>
+            <div class="pane-body">
+                <form method="POST" action="{{ route('safe-git.repositories.stash.create', $repository) }}">
+                    @csrf
+                    <label>stash メッセージ</label>
+                    <input name="message" placeholder="作業途中の退避">
+                    <button type="submit">stash push</button>
+                </form>
+
+                <table>
+                    <thead>
+                        <tr><th>stash</th><th>操作</th></tr>
+                    </thead>
+                    <tbody>
+                        @forelse($stashes as $stash)
+                            <tr>
+                                <td><code>{{ $stash['ref'] }}</code><br><span class="split-note">{{ $stash['message'] }}</span></td>
+                                <td>
+                                    <div class="actions">
+                                        <form class="mini-form" method="POST" action="{{ route('safe-git.repositories.stash.apply', $repository) }}">
+                                            @csrf
+                                            <input type="hidden" name="stash" value="{{ $stash['ref'] }}">
+                                            <input type="hidden" name="mode" value="apply">
+                                            <button type="submit" class="compact">apply</button>
+                                        </form>
+                                        <form class="mini-form" method="POST" action="{{ route('safe-git.repositories.stash.apply', $repository) }}">
+                                            @csrf
+                                            <input type="hidden" name="stash" value="{{ $stash['ref'] }}">
+                                            <input type="hidden" name="mode" value="pop">
+                                            <button type="submit" class="compact">pop</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="2">stash はありません。</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel pane">
             <div class="pane-header"><h2>Remote</h2></div>
             <div class="pane-body">
                 <form method="POST" action="{{ route('safe-git.repositories.remote', $repository) }}">
@@ -219,7 +331,21 @@
         <section class="panel pane">
             <div class="pane-header"><h2>History</h2></div>
             <div class="pane-body">
-                <pre>{{ $graph ?: 'ログはありません。' }}</pre>
+                <table>
+                    <thead>
+                        <tr><th>Commit</th><th>Message</th></tr>
+                    </thead>
+                    <tbody>
+                        @forelse($history as $commit)
+                            <tr>
+                                <td><code>{{ $commit['hash'] }}</code><br><span class="split-note">{{ $commit['date'] }} {{ $commit['author'] }}</span></td>
+                                <td>{{ $commit['message'] }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="2">履歴はありません。</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
             </div>
         </section>
     </aside>

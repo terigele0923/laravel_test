@@ -80,7 +80,7 @@ class GitCommandService
         $allowed = [
             'init', 'status', 'branch', 'remote', 'add', 'commit', 'fetch',
             'pull', 'push', 'diff', 'log', 'checkout', 'restore', 'rev-list',
-            'merge',
+            'merge', 'stash', 'clean',
         ];
 
         if (! in_array($operation, $allowed, true)) {

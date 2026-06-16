@@ -142,11 +142,40 @@ class SafeGitManagerController extends Controller
         );
     }
 
+    public function unstage(Request $request, SafeGitRepository $repository): RedirectResponse
+    {
+        $data = $request->validate([
+            'path' => ['required', 'string', 'max:1000'],
+        ]);
+
+        return $this->execute($request, $repository, 'unstage', fn () =>
+            $this->git->run($repository->local_path, ['restore', '--staged', '--', $data['path']])
+        );
+    }
+
+    public function discard(Request $request, SafeGitRepository $repository): RedirectResponse
+    {
+        $data = $request->validate([
+            'path' => ['required', 'string', 'max:1000'],
+            'untracked' => ['nullable', 'boolean'],
+        ]);
+
+        return $this->execute($request, $repository, 'discard', fn () =>
+            $request->boolean('untracked')
+                ? $this->git->run($repository->local_path, ['clean', '-f', '--', $data['path']])
+                : $this->git->run($repository->local_path, ['restore', '--', $data['path']])
+        );
+    }
+
     public function commit(Request $request, SafeGitRepository $repository): RedirectResponse
     {
         $data = $request->validate([
             'message' => ['required', 'string', 'max:500'],
         ]);
+
+        if (! $this->hasStagedChanges($repository)) {
+            return back()->with('error', 'ステージ済みファイルがありません。commit 前に add してください。');
+        }
 
         return $this->execute($request, $repository, 'commit', fn () =>
             $this->git->run($repository->local_path, ['commit', '-m', $data['message']])
@@ -163,6 +192,10 @@ class SafeGitManagerController extends Controller
     public function pull(Request $request, SafeGitRepository $repository): RedirectResponse
     {
         $branch = $this->currentBranch($repository);
+
+        if ($this->hasWorkingTreeChanges($repository) && ! $request->boolean('confirm_dirty_pull')) {
+            return back()->with('error', '未コミットの変更があります。pull する場合は確認チェックを入れるか、先に commit / stash してください。');
+        }
 
         return $this->execute($request, $repository, 'pull', fn () =>
             $this->git->run($repository->local_path, ['pull', 'origin', $branch])
@@ -215,6 +248,21 @@ class SafeGitManagerController extends Controller
         );
     }
 
+    public function checkoutRemoteBranch(Request $request, SafeGitRepository $repository): RedirectResponse
+    {
+        $data = $request->validate([
+            'remote_branch' => ['required', 'string', 'max:255'],
+            'local_branch' => ['required', 'string', 'max:255'],
+        ]);
+
+        $remoteBranch = $this->branchName($data['remote_branch']);
+        $localBranch = $this->branchName($data['local_branch']);
+
+        return $this->execute($request, $repository, 'branch_checkout_remote', fn () =>
+            $this->git->run($repository->local_path, ['checkout', '-b', $localBranch, $remoteBranch])
+        );
+    }
+
     public function deleteBranch(Request $request, SafeGitRepository $repository): RedirectResponse
     {
         $data = $request->validate([
@@ -256,11 +304,53 @@ class SafeGitManagerController extends Controller
         );
     }
 
-    public function diff(SafeGitRepository $repository): View
+    public function createStash(Request $request, SafeGitRepository $repository): RedirectResponse
     {
-        $result = $this->git->run($repository->local_path, ['diff']);
+        $data = $request->validate([
+            'message' => ['nullable', 'string', 'max:255'],
+        ]);
 
-        return view('safe-git-manager.repositories.diff', compact('repository', 'result'));
+        if (! $this->hasWorkingTreeChanges($repository)) {
+            return back()->with('error', 'stash する変更がありません。');
+        }
+
+        $message = trim($data['message'] ?? '') ?: 'Safe Git Manager stash';
+
+        return $this->execute($request, $repository, 'stash_create', fn () =>
+            $this->git->run($repository->local_path, ['stash', 'push', '-u', '-m', $message])
+        );
+    }
+
+    public function applyStash(Request $request, SafeGitRepository $repository): RedirectResponse
+    {
+        $data = $request->validate([
+            'stash' => ['required', 'string', 'max:100'],
+            'mode' => ['required', 'in:apply,pop'],
+        ]);
+
+        return $this->execute($request, $repository, 'stash_'.$data['mode'], fn () =>
+            $this->git->run($repository->local_path, ['stash', $data['mode'], $data['stash']])
+        );
+    }
+
+    public function diff(Request $request, SafeGitRepository $repository): View
+    {
+        $path = trim((string) $request->query('path', ''));
+        $cached = $request->boolean('cached');
+        $args = ['diff'];
+
+        if ($cached) {
+            $args[] = '--cached';
+        }
+
+        if ($path !== '') {
+            $args[] = '--';
+            $args[] = $path;
+        }
+
+        $result = $this->git->run($repository->local_path, $args);
+
+        return view('safe-git-manager.repositories.diff', compact('repository', 'result', 'path', 'cached'));
     }
 
     public function logs(SafeGitRepository $repository): View
@@ -316,6 +406,16 @@ class SafeGitManagerController extends Controller
     private function originExists(SafeGitRepository $repository): bool
     {
         return $this->git->run($repository->local_path, ['remote', 'get-url', 'origin'])->successful();
+    }
+
+    private function hasStagedChanges(SafeGitRepository $repository): bool
+    {
+        return $this->git->run($repository->local_path, ['diff', '--cached', '--quiet'])->exitCode === 1;
+    }
+
+    private function hasWorkingTreeChanges(SafeGitRepository $repository): bool
+    {
+        return trim($this->git->run($repository->local_path, ['status', '--porcelain'])->stdout) !== '';
     }
 
     private function branchName(string $branch): string
