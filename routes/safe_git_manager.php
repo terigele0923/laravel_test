@@ -17,6 +17,10 @@ Route::middleware(['web'])->prefix('safe-git')->name('safe-git.')->group(functio
     Route::post('/repositories/{repository}/fetch', [SafeGitManagerController::class, 'fetch'])->name('repositories.fetch');
     Route::post('/repositories/{repository}/pull', [SafeGitManagerController::class, 'pull'])->name('repositories.pull');
     Route::post('/repositories/{repository}/push', [SafeGitManagerController::class, 'push'])->name('repositories.push');
+    Route::post('/repositories/{repository}/branches', [SafeGitManagerController::class, 'createBranch'])->name('repositories.branches.create');
+    Route::post('/repositories/{repository}/branches/switch', [SafeGitManagerController::class, 'switchBranch'])->name('repositories.branches.switch');
+    Route::delete('/repositories/{repository}/branches', [SafeGitManagerController::class, 'deleteBranch'])->name('repositories.branches.delete');
+    Route::post('/repositories/{repository}/branches/merge', [SafeGitManagerController::class, 'mergeBranch'])->name('repositories.branches.merge');
 
     Route::get('/repositories/{repository}/diff', [SafeGitManagerController::class, 'diff'])->name('repositories.diff');
     Route::get('/repositories/{repository}/logs', [SafeGitManagerController::class, 'logs'])->name('repositories.logs');

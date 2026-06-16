@@ -14,9 +14,11 @@ class SafeGitAnalyzerService
         $status = $this->git->run($repository->local_path, ['status', '--porcelain']);
         $remote = $this->git->run($repository->local_path, ['remote', '-v']);
         $conflicts = $this->git->run($repository->local_path, ['diff', '--name-only', '--diff-filter=U']);
+        $branches = $this->git->run($repository->local_path, ['branch', '--format=%(HEAD)|%(refname:short)']);
 
         return [
             'branch' => trim($branch->stdout) ?: '-',
+            'branches' => $this->parseBranches($branches->stdout),
             'files' => $this->parsePorcelain($status->stdout),
             'remote' => trim($remote->stdout),
             'remotes' => $this->parseRemotes($remote->stdout),
@@ -31,6 +33,29 @@ class SafeGitAnalyzerService
         ]);
 
         return trim($result->stdout) ?: $result->stderr;
+    }
+
+    private function parseBranches(string $output): array
+    {
+        $branches = [];
+
+        foreach (array_filter(explode("\n", rtrim($output))) as $line) {
+            $line = rtrim($line, "\r");
+            [$head, $name] = array_pad(explode('|', $line, 2), 2, '');
+            $name = trim($name);
+
+            if ($name === '') {
+                continue;
+            }
+
+            $branches[] = [
+                'name' => $name,
+                'current' => trim($head) === '*',
+                'protected' => in_array($name, ['main', 'master'], true),
+            ];
+        }
+
+        return $branches;
     }
 
     private function parsePorcelain(string $output): array

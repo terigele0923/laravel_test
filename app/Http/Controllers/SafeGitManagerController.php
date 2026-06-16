@@ -9,6 +9,7 @@ use App\Services\SafeGitAnalyzerService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use InvalidArgumentException;
 use Throwable;
 
 class SafeGitManagerController extends Controller
@@ -181,6 +182,80 @@ class SafeGitManagerController extends Controller
         );
     }
 
+    public function createBranch(Request $request, SafeGitRepository $repository): RedirectResponse
+    {
+        $data = $request->validate([
+            'branch' => ['required', 'string', 'max:255'],
+            'checkout' => ['nullable', 'boolean'],
+        ]);
+
+        $branch = $this->branchName($data['branch']);
+
+        return $this->execute($request, $repository, 'branch_create', function () use ($request, $repository, $branch) {
+            $result = $this->git->run($repository->local_path, ['branch', $branch]);
+
+            if ($result->successful() && $request->boolean('checkout')) {
+                return $this->git->run($repository->local_path, ['checkout', $branch]);
+            }
+
+            return $result;
+        });
+    }
+
+    public function switchBranch(Request $request, SafeGitRepository $repository): RedirectResponse
+    {
+        $data = $request->validate([
+            'branch' => ['required', 'string', 'max:255'],
+        ]);
+
+        $branch = $this->branchName($data['branch']);
+
+        return $this->execute($request, $repository, 'branch_switch', fn () =>
+            $this->git->run($repository->local_path, ['checkout', $branch])
+        );
+    }
+
+    public function deleteBranch(Request $request, SafeGitRepository $repository): RedirectResponse
+    {
+        $data = $request->validate([
+            'branch' => ['required', 'string', 'max:255'],
+            'confirm_delete_protected' => ['nullable', 'boolean'],
+        ]);
+
+        $branch = $this->branchName($data['branch']);
+        $currentBranch = $this->currentBranch($repository);
+
+        if ($branch === $currentBranch) {
+            return back()->with('error', '現在使用中のブランチは削除できません。先に別のブランチへ切り替えてください。');
+        }
+
+        if (in_array($branch, ['main', 'master'], true) && ! $request->boolean('confirm_delete_protected')) {
+            return back()->with('error', 'main/master を削除するには確認チェックが必要です。');
+        }
+
+        return $this->execute($request, $repository, 'branch_delete', fn () =>
+            $this->git->run($repository->local_path, ['branch', '-d', $branch])
+        );
+    }
+
+    public function mergeBranch(Request $request, SafeGitRepository $repository): RedirectResponse
+    {
+        $data = $request->validate([
+            'branch' => ['required', 'string', 'max:255'],
+        ]);
+
+        $branch = $this->branchName($data['branch']);
+        $currentBranch = $this->currentBranch($repository);
+
+        if ($branch === $currentBranch) {
+            return back()->with('error', '現在のブランチ自身はマージできません。');
+        }
+
+        return $this->execute($request, $repository, 'branch_merge', fn () =>
+            $this->git->run($repository->local_path, ['merge', '--no-ff', $branch])
+        );
+    }
+
     public function diff(SafeGitRepository $repository): View
     {
         $result = $this->git->run($repository->local_path, ['diff']);
@@ -241,5 +316,16 @@ class SafeGitManagerController extends Controller
     private function originExists(SafeGitRepository $repository): bool
     {
         return $this->git->run($repository->local_path, ['remote', 'get-url', 'origin'])->successful();
+    }
+
+    private function branchName(string $branch): string
+    {
+        $branch = trim($branch);
+
+        if ($branch === '') {
+            throw new InvalidArgumentException('ブランチ名を入力してください。');
+        }
+
+        return $branch;
     }
 }

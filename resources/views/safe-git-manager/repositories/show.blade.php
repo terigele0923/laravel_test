@@ -6,6 +6,9 @@
     $originUrl = $originRemote['push'] ?? $originRemote['fetch'] ?? null;
     $selectedRemoteMode = old('mode', $originRemote ? 'set-url' : 'add');
     $files = $status['files'] ?? [];
+    $branches = $status['branches'] ?? [];
+    $currentBranch = $status['branch'] ?? '-';
+    $mergeBranches = array_values(array_filter($branches, fn ($branch) => ! $branch['current']));
 @endphp
 
 <div class="actions" style="justify-content: space-between;">
@@ -21,7 +24,7 @@
     <div class="card">
         <h2>プロジェクト情報</h2>
         <p><strong>ローカル:</strong> <code>{{ $repository->local_path }}</code></p>
-        <p><strong>ブランチ:</strong> {{ $status['branch'] ?? '-' }}</p>
+        <p><strong>現在ブランチ:</strong> {{ $currentBranch }}</p>
         <p><strong>デフォルト:</strong> {{ $repository->default_branch }}</p>
     </div>
 
@@ -60,7 +63,86 @@
 </div>
 
 <div class="card">
-    <h2>2. 変更ファイル</h2>
+    <h2>2. ブランチ管理</h2>
+    <p class="muted">作業用ブランチを作成し、切り替え、不要になったブランチを削除できます。マージは現在ブランチへ取り込みます。</p>
+
+    <div class="grid">
+        <form method="POST" action="{{ route('safe-git.repositories.branches.create', $repository) }}">
+            @csrf
+            <label>新規ブランチ名</label>
+            <input name="branch" placeholder="feature/example" required>
+            <label><input type="checkbox" name="checkout" value="1" checked> 作成後に切り替える</label>
+            <button type="submit" class="primary">ブランチ作成</button>
+        </form>
+
+        <form method="POST" action="{{ route('safe-git.repositories.branches.merge', $repository) }}">
+            @csrf
+            <label>現在ブランチへマージするブランチ</label>
+            <select name="branch" required>
+                @forelse($mergeBranches as $branch)
+                    <option value="{{ $branch['name'] }}">{{ $branch['name'] }}</option>
+                @empty
+                    <option value="">マージできるブランチがありません</option>
+                @endforelse
+            </select>
+            <button type="submit">現在ブランチへマージ</button>
+        </form>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ブランチ</th>
+                <th>状態</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            @forelse($branches as $branch)
+                <tr>
+                    <td><code>{{ $branch['name'] }}</code></td>
+                    <td>
+                        @if($branch['current'])
+                            <span class="badge ok">現在</span>
+                        @elseif($branch['protected'])
+                            <span class="badge">保護対象</span>
+                        @else
+                            <span class="badge">ローカル</span>
+                        @endif
+                    </td>
+                    <td>
+                        <div class="actions">
+                            @unless($branch['current'])
+                                <form method="POST" action="{{ route('safe-git.repositories.branches.switch', $repository) }}">
+                                    @csrf
+                                    <input type="hidden" name="branch" value="{{ $branch['name'] }}">
+                                    <button type="submit">切り替え</button>
+                                </form>
+
+                                <form method="POST" action="{{ route('safe-git.repositories.branches.delete', $repository) }}" onsubmit="return confirm('ローカルブランチ「{{ $branch['name'] }}」を削除します。よろしいですか？');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <input type="hidden" name="branch" value="{{ $branch['name'] }}">
+                                    @if($branch['protected'])
+                                        <label><input type="checkbox" name="confirm_delete_protected" value="1"> main/master 削除を確認</label>
+                                    @endif
+                                    <button type="submit" class="danger">削除</button>
+                                </form>
+                            @else
+                                <span class="muted">現在使用中です</span>
+                            @endunless
+                        </div>
+                    </td>
+                </tr>
+            @empty
+                <tr><td colspan="3">ブランチ情報がありません。</td></tr>
+            @endforelse
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>3. 変更ファイル</h2>
     <p class="muted">コミットしたいファイルを add します。まとめて追加する場合は下のボタンを使います。</p>
 
     <div class="actions">
@@ -102,7 +184,7 @@
 </div>
 
 <div class="card">
-    <h2>3. Commit</h2>
+    <h2>4. Commit</h2>
     <form method="POST" action="{{ route('safe-git.repositories.commit', $repository) }}">
         @csrf
         <label>コミットメッセージ</label>
@@ -112,7 +194,7 @@
 </div>
 
 <div class="card">
-    <h2>4. 同期</h2>
+    <h2>5. 同期</h2>
     <div class="actions">
         <form method="POST" action="{{ route('safe-git.repositories.fetch', $repository) }}">
             @csrf
