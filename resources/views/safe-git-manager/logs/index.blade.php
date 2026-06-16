@@ -2,24 +2,28 @@
 
 @section('content')
 <h1>操作ログ: {{ $repository->name }}</h1>
-<p><a href="{{ route('safe-git.repositories.show', $repository) }}">戻る</a></p>
+<p><a href="{{ route('safe-git.repositories.show', $repository) }}">詳細へ戻る</a></p>
 
 <table>
     <thead>
         <tr>
             <th>日時</th>
-            <th>操作画面</th>
+            <th>操作</th>
             <th>状態</th>
             <th>コマンド</th>
             <th>出力</th>
         </tr>
     </thead>
     <tbody>
-        @foreach($logs as $log)
+        @forelse($logs as $log)
             <tr>
                 <td>{{ $log->created_at }}</td>
                 <td>{{ $log->operation }}</td>
-                <td>{{ $log->status }}</td>
+                <td>
+                    <span class="badge {{ $log->status === 'success' ? 'ok' : 'ng' }}">
+                        {{ $log->status }}
+                    </span>
+                </td>
                 <td><code>{{ $log->command }}</code></td>
                 <td>
                     <details>
@@ -28,7 +32,11 @@
                     </details>
                 </td>
             </tr>
-        @endforeach
+        @empty
+            <tr>
+                <td colspan="5">操作ログはありません。</td>
+            </tr>
+        @endforelse
     </tbody>
 </table>
 

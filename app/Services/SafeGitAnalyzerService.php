@@ -19,6 +19,7 @@ class SafeGitAnalyzerService
             'branch' => trim($branch->stdout) ?: '-',
             'files' => $this->parsePorcelain($status->stdout),
             'remote' => trim($remote->stdout),
+            'remotes' => $this->parseRemotes($remote->stdout),
             'conflicts' => array_values(array_filter(explode("\n", trim($conflicts->stdout)))),
         ];
     }
@@ -49,6 +50,24 @@ class SafeGitAnalyzerService
         }
 
         return $files;
+    }
+
+    private function parseRemotes(string $output): array
+    {
+        $remotes = [];
+
+        foreach (array_filter(explode("\n", rtrim($output))) as $line) {
+            $line = trim($line);
+
+            if (! preg_match('/^(\S+)\s+(\S+)\s+\((fetch|push)\)$/', $line, $matches)) {
+                continue;
+            }
+
+            [, $name, $url, $type] = $matches;
+            $remotes[$name][$type] = $url;
+        }
+
+        return $remotes;
     }
 
     private function labelStatus(string $status): string

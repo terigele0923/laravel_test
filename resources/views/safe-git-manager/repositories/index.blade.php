@@ -1,27 +1,36 @@
 @extends('safe-git-manager.layout')
 
 @section('content')
-<h1>リポジトリ一覧</h1>
-<p><a href="{{ route('safe-git.repositories.create') }}">新規登録</a></p>
+<div class="actions" style="justify-content: space-between;">
+    <div>
+        <h1>リポジトリ一覧</h1>
+        <p class="muted">この画面で管理するローカル Git プロジェクトを選びます。</p>
+    </div>
+    <a href="{{ route('safe-git.repositories.create') }}"><button class="primary">新規登録</button></a>
+</div>
 
 <table>
     <thead>
         <tr>
-            <th>名前</th>
-            <th>Local Path</th>
-            <th>Remote</th>
+            <th>プロジェクト名</th>
+            <th>ローカルパス</th>
+            <th>登録済み Remote URL</th>
             <th>操作</th>
         </tr>
     </thead>
     <tbody>
-        @foreach($repositories as $repository)
+        @forelse($repositories as $repository)
             <tr>
-                <td>{{ $repository->name }}</td>
-                <td>{{ $repository->local_path }}</td>
-                <td>{{ $repository->remote_url }}</td>
-                <td><a href="{{ route('safe-git.repositories.show', $repository) }}">詳細</a></td>
+                <td><strong>{{ $repository->name }}</strong></td>
+                <td><code>{{ $repository->local_path }}</code></td>
+                <td>{{ $repository->remote_url ?: '-' }}</td>
+                <td><a href="{{ route('safe-git.repositories.show', $repository) }}">詳細を開く</a></td>
             </tr>
-        @endforeach
+        @empty
+            <tr>
+                <td colspan="4">まだリポジトリが登録されていません。</td>
+            </tr>
+        @endforelse
     </tbody>
 </table>
 

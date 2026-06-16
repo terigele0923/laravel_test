@@ -21,6 +21,7 @@ class SafeGitManagerController extends Controller
     public function index(): View
     {
         $repositories = SafeGitRepository::latest()->paginate(20);
+
         return view('safe-git-manager.repositories.index', compact('repositories'));
     }
 
@@ -92,6 +93,16 @@ class SafeGitManagerController extends Controller
             'mode' => ['required', 'in:add,set-url'],
         ]);
 
+        $originExists = $this->originExists($repository);
+
+        if ($data['mode'] === 'add' && $originExists) {
+            return back()->with('error', 'origin はすでに設定されています。URLを変更する場合は「remote set-url origin」を選んでください。');
+        }
+
+        if ($data['mode'] === 'set-url' && ! $originExists) {
+            return back()->with('error', 'origin はまだ設定されていません。初回は「remote add origin」を選んでください。');
+        }
+
         return $this->execute($request, $repository, 'remote_'.$data['mode'], function () use ($data, $repository) {
             $args = $data['mode'] === 'add'
                 ? ['remote', 'add', 'origin', $data['remote_url']]
@@ -153,7 +164,7 @@ class SafeGitManagerController extends Controller
         $branch = $this->currentBranch($repository);
 
         if (in_array($branch, ['main', 'master'], true) && ! $request->boolean('confirm_main_push')) {
-            return back()->with('error', 'main/master への直接pushは危険です。確認チェックを入れてください。');
+            return back()->with('error', 'main/master への直接 push は慎重に行う必要があります。確認チェックを入れてから実行してください。');
         }
 
         return $this->execute($request, $repository, 'push', fn () =>
@@ -164,12 +175,14 @@ class SafeGitManagerController extends Controller
     public function diff(SafeGitRepository $repository): View
     {
         $result = $this->git->run($repository->local_path, ['diff']);
+
         return view('safe-git-manager.repositories.diff', compact('repository', 'result'));
     }
 
     public function logs(SafeGitRepository $repository): View
     {
         $logs = $repository->logs()->latest()->paginate(30);
+
         return view('safe-git-manager.logs.index', compact('repository', 'logs'));
     }
 
@@ -189,7 +202,10 @@ class SafeGitManagerController extends Controller
                 'exit_code' => $result->exitCode,
             ]);
 
-            return back()->with($result->successful() ? 'success' : 'error', $result->successful() ? '実行しました。' : '実行に失敗しました。');
+            return back()->with(
+                $result->successful() ? 'success' : 'error',
+                $result->successful() ? '実行しました。' : '実行に失敗しました。詳細は操作ログを確認してください。'
+            );
         } catch (Throwable $e) {
             SafeGitOperationLog::create([
                 'user_id' => optional($request->user())->id,
@@ -209,6 +225,12 @@ class SafeGitManagerController extends Controller
     private function currentBranch(SafeGitRepository $repository): string
     {
         $result = $this->git->run($repository->local_path, ['branch', '--show-current']);
+
         return trim($result->stdout) ?: $repository->default_branch;
+    }
+
+    private function originExists(SafeGitRepository $repository): bool
+    {
+        return $this->git->run($repository->local_path, ['remote', 'get-url', 'origin'])->successful();
     }
 }

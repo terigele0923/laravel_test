@@ -13,7 +13,7 @@ class GitCommandService
         $this->assertSafeWorkingDirectory($workingDirectory);
         $this->assertAllowedGitArguments($arguments);
 
-        $command = array_merge(['git'], $arguments);
+        $command = array_merge(['git', '-c', 'safe.directory='.$workingDirectory], $arguments);
         $process = new Process($command, $workingDirectory, $this->gitEnvironment());
         $process->setTimeout(60);
         $process->run();
@@ -66,7 +66,7 @@ class GitCommandService
         }
 
         if (str_contains($path, '..')) {
-            throw new InvalidArgumentException('相対パス .. は利用できません。');
+            throw new InvalidArgumentException('相対パス「..」は利用できません。');
         }
 
         if ($shouldExist && ! is_dir($path)) {
@@ -83,7 +83,7 @@ class GitCommandService
         ];
 
         if (! in_array($operation, $allowed, true)) {
-            throw new InvalidArgumentException('許可されていないGit操作です。');
+            throw new InvalidArgumentException('許可されていない Git 操作です。');
         }
 
         $joined = implode(' ', $arguments);
@@ -97,7 +97,7 @@ class GitCommandService
 
         foreach ($blockedPatterns as $pattern) {
             if (str_contains($joined, $pattern)) {
-                throw new InvalidArgumentException('危険操作のため実行できません: '.$pattern);
+                throw new InvalidArgumentException('危険な操作のため実行できません: '.$pattern);
             }
         }
     }
